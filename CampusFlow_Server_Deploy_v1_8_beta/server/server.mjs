@@ -50,7 +50,7 @@ export const handleRequest=async(req,res)=>{
   }
   if(req.method!=='POST'||!['/api/analyze','/api/ask'].includes(url.pathname))return send(res,404,{error:'Not found'});
   if(!String(req.headers['content-type']||'').startsWith('application/json'))throw apiError(415,'JSON 요청만 지원합니다.');
-  let size=0,chunks=[];for await(const c of req){size+=c.length;if(size>12*1024*1024){send(res,413,{error:'파일이 너무 큽니다. PDF 7MB 이하로 사용하세요.'});return;}chunks.push(c);}
+  let size=0,chunks=[];for await(const c of req){size+=c.length;if(size>30*1024*1024){send(res,413,{error:'파일이 너무 큽니다. PDF 20MB 이하로 사용하세요.'});return;}chunks.push(c);}
   let b;try{b=JSON.parse(Buffer.concat(chunks).toString());}catch{throw apiError(400,'올바른 JSON 요청이 필요합니다.');}
   if(!b||typeof b!=='object'||Array.isArray(b))throw apiError(400,'요청 형식이 올바르지 않습니다.');
   if(!/^[a-zA-Z0-9._-]{1,100}$/.test(b.model||''))return send(res,400,{error:'AI 모델을 선택하세요.'});
@@ -59,7 +59,7 @@ export const handleRequest=async(req,res)=>{
   if(!analyze&&(typeof b.question!=='string'||!b.question.trim()||b.question.length>4000))throw apiError(400,'질문은 1~4000자로 입력하세요.');
   let parts=[],source=null;
   if(b.document?.mime==='application/pdf'){
-   const data=b.document.data;if(typeof data!=='string'||!/^JVBER[A-Za-z0-9+/]*={0,2}$/.test(data)||Buffer.from(data,'base64').length>7*1024*1024)return send(res,400,{error:'유효한 7MB 이하 PDF가 필요합니다.'});
+   const data=b.document.data;if(typeof data!=='string'||!/^JVBER[A-Za-z0-9+/]*={0,2}$/.test(data)||Buffer.from(data,'base64').length>20*1024*1024)return send(res,400,{error:'유효한 20MB 이하 PDF가 필요합니다.'});
    await security.reserve(userId);
    parts.push({inlineData:{mimeType:'application/pdf',data}});
    try{const pages=await pdfPages(data);source=sourceFields(pages);const text=pages.map(p=>'[PDF '+p.page+'페이지]\n'+p.text).join('\n');if(text.length>220000)throw new Error('PDF 텍스트가 너무 깁니다. 문서를 나누어 주세요.');if(text.trim())parts.push({text:'아래는 같은 PDF에서 직접 추출한 페이지별 원문이다. 한글 글자가 보이는 경우 없다고 주장하지 말고 표와 대조하라. 텍스트/이미지가 다르면 추측하지 말고 충돌을 경고하라.\n'+text});}catch(e){throw apiError(422,'PDF 원문 추출에 실패했습니다. 암호화되지 않은 PDF나 TXT로 다시 시도하세요.');}
@@ -75,7 +75,7 @@ export const handleRequest=async(req,res)=>{
   const status=busy?503:([400,401,403,404,413,415,422,429,503].includes(e.status)?e.status:502);
   const safe=e.code||e.status===415||e.status===422||e.status===400;
   const message=busy?'서버가 혼잡하여 다른 무료 버전을 이용해주세요.':e.name==='TimeoutError'?'응답 시간이 초과됐습니다. 잠시 후 다시 시도하세요.':e.status===429&&!e.code?'AI 제공자의 무료 한도에 도달했습니다. 잠시 후 다시 시도하세요.':safe?e.message:'AI 요청을 완료하지 못했습니다. 문서와 모델을 확인하고 잠시 후 다시 시도하세요.';
-  send(res,status,{error:message,...(busy?{code:'MODEL_BUSY'}:e.code?{code:e.code}:{})});
+  send(res,status,{error:message,...(e.status===429&&!e.code?{code:'PROVIDER_QUOTA'}:{}),...(busy?{code:'MODEL_BUSY'}:e.code?{code:e.code}:{})});
  }finally{active--;}
 
 };
