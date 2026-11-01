@@ -1,0 +1,21 @@
+# 비밀 키와 환경설정
+.env
+.env.*
+!.env.example
+
+# 설치·빌드 결과
+node_modules/
+.gradle/
+build/
+local.properties
+
+# Android 서명 키
+*.jks
+*.keystore
+keystore.properties
+
+# APK·기타 파일
+*.apk
+*.aab
+.idea/
+*.log
