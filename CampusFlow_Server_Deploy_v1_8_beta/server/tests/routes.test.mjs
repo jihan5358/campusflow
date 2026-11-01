@@ -1,0 +1,25 @@
+// No listening socket, no live API calls: exercise the HTTP handler using in-memory requests.
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {Readable} from 'node:stream';
+Object.assign(process.env,{GEMINI_API_KEY:'test-gemini-key',FIREBASE_WEB_API_KEY:'test-web-key',FIREBASE_PROJECT_ID:'test-project',UPSTASH_REDIS_REST_URL:'https://example.upstash.io',UPSTASH_REDIS_REST_TOKEN:'test-redis-token',RATE_LIMIT_SALT:'r'.repeat(40),ALLOWED_MODELS:'gemini-3.8-flash'});
+const claims={aud:'test-project',iss:'https://securetoken.google.com/test-project',exp:Math.floor(Date.now()/1000)+3600,sub:'test-user'};
+const token='header.'+Buffer.from(JSON.stringify(claims)).toString('base64url')+'.signature';
+let calls=[],quotaResult=0,verified=true,aiStatus=200,aiMessage='';
+globalThis.fetch=async(url,options)=>{calls.push({url,options});let j,status=200;if(url.includes('upstash.io'))j={result:JSON.parse(options.body)[2]==='4'?quotaResult:0};else if(url.includes('identitytoolkit'))j={users:[{localId:'test-user',emailVerified:verified}]};else {status=aiStatus;j=status===200?{candidates:[{finishReason:'STOP',content:{parts:[{text:JSON.stringify({course:{name:'테스트'},meetings:[],events:[],books:[],facts:[],warnings:[]})}]}}]}:{error:{message:aiMessage}};}return{ok:status<400,status,json:async()=>j};};
+const {handleRequest}=await import('../server.mjs');
+async function request(path,method='GET',body,headers={}){calls=[];const req=Readable.from(body===undefined?[]:[Buffer.from(JSON.stringify(body))]);Object.assign(req,{url:path,method,headers:{origin:'https://localhost',authorization:'Bearer '+token,'content-type':'application/json',...headers},socket:{remoteAddress:'127.0.0.1'}});let status=200,text='',outHeaders={};const res={setHeader(k,v){outHeaders[k]=v;},writeHead(s,h={}){status=s;Object.assign(outHeaders,h);},end(t=''){text+=t;}};await handleRequest(req,res);let data;try{data=JSON.parse(text);}catch{data=text;}return{status,data,headers:outHeaders};}
+test('health is public and makes no upstream calls',async()=>{const r=await request('/health');assert.equal(r.status,200);assert.equal(r.data.ok,true);assert.equal(calls.length,0);});
+test('config exposes only Firebase public config and limits',async()=>{const r=await request('/api/config');assert.equal(r.status,200);assert.ok(!JSON.stringify(r.data).includes('test-gemini-key'));assert.ok(!JSON.stringify(r.data).includes('test-redis-token'));});
+test('privacy notice exists',async()=>{const r=await request('/privacy.html');assert.equal(r.status,200);assert.match(r.data,/데이터 처리/);});
+test('CORS rejects unknown origin without upstream',async()=>{const r=await request('/api/models','GET',undefined,{origin:'https://evil.example'});assert.equal(r.status,403);assert.equal(calls.length,0);});
+test('preflight allows authorization header',async()=>{const r=await request('/api/ask','OPTIONS');assert.equal(r.status,204);assert.match(r.headers['Access-Control-Allow-Headers'],/Authorization/);});
+test('no login denied',async()=>{const r=await request('/api/models','GET',undefined,{authorization:''});assert.equal(r.status,401);});
+test('model list only operator allowlist',async()=>{const r=await request('/api/models');assert.equal(r.status,200);assert.deepEqual(r.data.models,['gemini-3.8-flash']);});
+test('unverified email denied',async()=>{verified=false;try{assert.equal((await request('/api/models')).status,403);}finally{verified=true;}});
+test('paid/unlisted model rejected before AI call',async()=>{const r=await request('/api/analyze','POST',{model:'gemini-4-argon',document:{text:'test'}});assert.equal(r.status,403);assert.equal(calls.filter(x=>x.url.includes('generativelanguage')).length,0);});
+test('empty question rejected',async()=>{const r=await request('/api/ask','POST',{model:'gemini-3.8-flash',document:{text:'test'},question:''});assert.equal(r.status,400);});
+test('oversized text rejected',async()=>{const r=await request('/api/analyze','POST',{model:'gemini-3.8-flash',document:{text:'x'.repeat(100001)}});assert.equal(r.status,400);});
+test('quota blocks without AI call',async()=>{quotaResult=1;try{const r=await request('/api/analyze','POST',{model:'gemini-3.8-flash',document:{text:'test'}});assert.equal(r.status,429);assert.equal(r.data.code,'GLOBAL_LIMIT');assert.equal(calls.filter(x=>x.url.includes('generativelanguage')).length,0);}finally{quotaResult=0;}});
+test('mock analysis returns structured data and one AI call',async()=>{const r=await request('/api/analyze','POST',{model:'gemini-3.8-flash',document:{text:'강의명 테스트'}});assert.equal(r.status,200);assert.equal(r.data.data.course.name,'테스트');assert.equal(calls.filter(x=>x.url.includes('generativelanguage')).length,1);});
+test('mock upstream busy produces requested Korean notice',async()=>{aiStatus=503;aiMessage='This model is currently experiencing high demand';try{const r=await request('/api/analyze','POST',{model:'gemini-3.8-flash',document:{text:'test'}});assert.equal(r.status,503);assert.equal(r.data.code,'MODEL_BUSY');assert.equal(r.data.error,'서버가 혼잡하여 다른 무료 버전을 이용해주세요.');}finally{aiStatus=200;}});
