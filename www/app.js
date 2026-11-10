@@ -123,7 +123,17 @@ function renderUnifiedWeek(){
  let box=document.getElementById('unifiedWeekAgenda');
  if(!box){box=document.createElement('div');box.id='unifiedWeekAgenda';document.getElementById('monthCalendar').insertAdjacentElement('afterend',box);}
  box.classList.toggle('hide',calendarMode!=='week');if(calendarMode!=='week')return;
- box.innerHTML='<h3>이번 주 전체 일정 · 월~일</h3><p class="disclaimer">시간이 정해지지 않은 시험·과제는 아래 날짜별 목록에 표시합니다. 임의의 시간으로 시간표에 배치하지 않습니다.</p>'+Array.from({length:7},(_,i)=>{const d=plus(week,i),entries=dayEntries(d);return `<div class="card" style="margin:10px 0;padding:14px"><strong>${esc(iso(d))} (${'월화수목금토일'[i]})</strong>${entries.length?entries.map(e=>`<div class="planitem"><b>${esc(e.kind==='cancel'?'[휴강] ':e.kind==='deadline'?'[시험·과제] ':e.kind==='study'?'[공부] ':'')}${esc(e.title)}</b><span>${esc(e.time)} · ${esc(e.detail)}</span></div>`).join(''):'<p class="muted">등록된 일정이 없습니다.</p>'}</div>`;}).join('');
+ // Only user-added personal events and registered assignment/exam deadlines.
+ // Recurring classes, makeups, cancellations, and generated study sessions are excluded.
+ const rows=Array.from({length:7},(_,i)=>{
+  const d=plus(week,i),ds=iso(d);
+  const tasks=state.tasks.filter(t=>t.due===ds).map(t=>({title:t.title,time:t.type+' 마감',detail:t.done?'완료':'미완료',kind:'deadline'}));
+  const personal=(state.personalEvents||[]).filter(e=>e.date===ds).map(e=>({title:e.title,time:e.start+'–'+e.end,detail:e.type||'개인 일정',kind:'personal'}));
+  const entries=[...tasks,...personal];
+  if(!entries.length)return '';
+  return `<div class="card" style="margin:10px 0;padding:14px"><strong>${esc(ds)} (${'월화수목금토일'[i]})</strong>${entries.map(e=>`<div class="planitem"><b>${esc(e.kind==='deadline'?'[과제·시험] ':'[개인 일정] ')}${esc(e.title)}</b><span>${esc(e.time)} · ${esc(e.detail)}</span></div>`).join('')}</div>`;
+ }).filter(Boolean);
+ box.innerHTML='<h3>이번 주 특별 일정 · 월~일</h3><p class="disclaimer">직접 등록한 개인 일정과 과제·시험 마감일만 표시합니다. 매주 반복되는 정규 강의는 제외됩니다.</p>'+(rows.join('')||'<p class="muted">이번 주 등록된 특별 일정이 없습니다.</p>');
 }
 const beforeUnifiedSchedule=renderSchedule;
 renderSchedule=function(){beforeUnifiedSchedule();renderUnifiedWeek();};
