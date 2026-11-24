@@ -54,7 +54,7 @@ function taskPriority(task,start,p){const c=course(task.course)||{},importance=(
 function timeFit(d){const h=d.getHours(),p=profile();if(p.preferredTime==='morning')return h>=9&&h<12?100:30;if(p.preferredTime==='afternoon')return h>=12&&h<17?100:35;if(p.preferredTime==='evening')return h>=17?100:25;return 70;}
 function allowedDay(d){const day=d.getDay();return day!==0&&day!==6||profile().weekends;}
 function planner(){const ds=$('#priorityStart').value,p=profile();if(!validDate(ds)||ds<iso(today))return toast('오늘 이후 시작일을 선택하세요.');
- const tasks=state.tasks.filter(t=>!t.done&&t.due>ds&&Number(t.hours)>0).map(t=>({...t,score:taskPriority(t,ds,p)})).sort((a,b)=>b.score-a.score||a.due.localeCompare(b.due));
+ const tasks=plannerUniqueTasks().filter(t=>t.due>ds&&Number(t.hours)>0).map(t=>({...t,score:taskPriority(t,ds,p)})).sort((a,b)=>b.score-a.score||a.due.localeCompare(b.due));
  if(!tasks.length)return toast('시작일 이후의 미완료 과제·시험이 없습니다.');
  const proposal=[],summary=[];const dailyUsed={};state.plans.forEach(x=>{dailyUsed[x.date]=(dailyUsed[x.date]||0)+durationMinutes(x)/60;});
  const startMin=Number(state.settings.start||9)*60,endMin=Number(state.settings.end||19)*60,step=30,block=p.includeReview?Math.min(p.sessionMinutes,60):p.sessionMinutes;

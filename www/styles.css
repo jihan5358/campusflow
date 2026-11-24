@@ -51,3 +51,6 @@ body.mobile-home #home .sidecards p{font-size:12px}
 @media(max-width:720px){.motivation-banner{padding:11px 12px;margin:-4px 0 12px;gap:9px}.motivation-icon{width:32px;height:32px;flex-basis:32px}.motivation-copy strong{font-size:12px}.motivation-copy p{font-size:10px}.profile-grid,.profile-checks{grid-template-columns:1fr}.auth-shell{margin:4vh auto;padding:23px 19px}}
 
 .monthtag.personal{background:#e8f5ef;color:#16734f}
+
+/* AI analysis status is intentionally placed directly under the analyze button. */
+.ai-status{border:1px solid #f1d38a;font-size:13px;line-height:1.55}
