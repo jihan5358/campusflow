@@ -45,6 +45,7 @@ async function flush(){if(!uid||loading||writing||!dirty)return;writing=true;dir
  }catch(e){dirty=true;if(e.status===400||e.status===409||e.status===412){conflict=true;note('다른 기기에서 먼저 변경했습니다. 새로고침하여 최신 데이터를 확인하세요.');}else note('저장 실패: '+e.message);throw e}
  finally{writing=false;if(dirty&&uid&&revision&&!timer&&!(typeof conflict==='boolean'&&conflict)){timer=setTimeout(()=>{timer=null;flush().catch(()=>{})},3000)}}
 }
+async function deleteData(){if(!uid)return;clearTimeout(timer);timer=null;if(dirty)await flush();await request('DELETE');uid=null;revision=null;dirty=false;loading=false;conflict=false;note('클라우드 계정 데이터 삭제 완료')}
 function logout(){clearTimeout(timer);timer=null;uid=null;revision=null;dirty=false;loading=false;conflict=false;note('로그아웃 · 계정 동기화 중지')}
-window.CampusCloud=Object.freeze({login,logout,queueSave});
+window.CampusCloud=Object.freeze({login,logout,deleteData,queueSave});
 })();
